@@ -2,26 +2,52 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
-const API_KEY_STORAGE_KEY = "playground_api_key";
+const PLAYGROUND_KEY_STORAGE = "playground_api_key";
 
-const isValidApiKey = (key: string): boolean => {
-  const trimmed = key.trim();
-  return trimmed.length >= 24 && trimmed.startsWith("sk-");
+const validateKeyWithSupabase = async (key: string): Promise<boolean> => {
+  if (!supabase) return false;
+  const { data: rpcData, error: rpcError } = await (supabase as unknown as { rpc: (n: string, p: { p_input_key: string }) => Promise<{ data: boolean | boolean[] | null; error: unknown }> }).rpc("validate_api_key", { p_input_key: key.trim() });
+  if (!rpcError && rpcData !== null && rpcData !== undefined) {
+    return Array.isArray(rpcData) ? rpcData[0] === true : rpcData === true;
+  }
+  const { data: row, error } = await supabase
+    .from("api_keys")
+    .select("id")
+    .eq("key", key.trim())
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error || !row) return false;
+  return true;
 };
 
 const ProtectedPage = () => {
   const [status, setStatus] = useState<"valid" | "invalid" | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = sessionStorage.getItem(API_KEY_STORAGE_KEY);
-    const valid = key !== null && isValidApiKey(key);
-    setStatus(valid ? "valid" : "invalid");
+    const key = typeof window !== "undefined" ? sessionStorage.getItem(PLAYGROUND_KEY_STORAGE) : null;
+    if (key === null || key === "") {
+      setStatus("invalid");
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      const valid = await validateKeyWithSupabase(key);
+      if (!cancelled) setStatus(valid ? "valid" : "invalid");
+    };
+    run();
     return () => {
-      sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+      cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (status !== null && typeof window !== "undefined") {
+      const t = setTimeout(() => sessionStorage.removeItem(PLAYGROUND_KEY_STORAGE), 500);
+      return () => clearTimeout(t);
+    }
+  }, [status]);
 
   if (status === null) {
     return (

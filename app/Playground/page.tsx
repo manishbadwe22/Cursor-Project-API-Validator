@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const API_KEY_STORAGE_KEY = "playground_api_key";
+const PLAYGROUND_KEY_STORAGE = "playground_api_key";
 
 const PlaygroundPage = () => {
   const [apiKey, setApiKey] = useState("");
@@ -16,7 +16,7 @@ const PlaygroundPage = () => {
     if (!trimmed) return;
     setIsSubmitting(true);
     if (typeof window !== "undefined") {
-      sessionStorage.setItem(API_KEY_STORAGE_KEY, trimmed);
+      sessionStorage.setItem(PLAYGROUND_KEY_STORAGE, trimmed);
     }
     router.push("/protected");
   };

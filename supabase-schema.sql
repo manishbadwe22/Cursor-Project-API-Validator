@@ -41,3 +41,18 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Validate API key (TRIM both sides so whitespace in DB or input doesn't break match)
+CREATE OR REPLACE FUNCTION validate_api_key(p_input_key TEXT)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM api_keys
+    WHERE TRIM(key) = TRIM(p_input_key)
+    AND is_active = true
+    AND (expires_at IS NULL OR expires_at >= CURRENT_DATE)
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- Use the type name TEXT (not your API key) in the lines below:
+GRANT EXECUTE ON FUNCTION validate_api_key(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION validate_api_key(TEXT) TO authenticated;
