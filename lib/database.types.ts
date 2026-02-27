@@ -59,5 +59,11 @@ export interface Database {
         Update: ApiKeyUpdate;
       };
     };
+    Functions: {
+      validate_api_key: {
+        Args: { p_input_key: string };
+        Returns: boolean;
+      };
+    };
   };
 }
