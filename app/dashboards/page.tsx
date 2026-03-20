@@ -437,44 +437,54 @@ const DashboardsPage = () => {
               .join("");
 
         if (supabase) {
+          const insertPayload: ApiKeyInsert = {
+            name: formData.name,
+            key: generatedKey,
+            description: formData.description?.trim() || null,
+            permissions:
+              formData.permissions.length > 0 ? formData.permissions : null,
+            expires_at: formData.expiresAt?.trim() || null,
+            is_active: true,
+            usage: 0,
+            monthly_usage_limit: formData.limitEnabled
+              ? formData.monthlyUsageLimit
+              : null,
+          };
+
           const { data, error } = await supabase
             .from("api_keys")
-            .insert({
-              name: formData.name,
-              key: generatedKey,
-              description: formData.description || null,
-              permissions: formData.permissions,
-              expires_at: formData.expiresAt || null,
-              is_active: true,
-              usage: 0,
-              monthly_usage_limit: formData.limitEnabled
-                ? formData.monthlyUsageLimit
-                : null,
-            } as never)
-            .select()
-            .single();
+            .insert(insertPayload as never)
+            .select();
 
           if (error) {
             console.error("Error creating API key:", error);
-            showToast("Failed to create API key", "error");
+            showToast(
+              error.message
+                ? `Failed to create API key: ${error.message}`
+                : "Failed to create API key",
+              "error"
+            );
             return;
           }
 
-          const row = data as ApiKeyRow;
-          const newKey: ApiKey = {
-            id: row.id,
-            name: row.name,
-            key: row.key,
-            description: row.description || undefined,
-            permissions: row.permissions || [],
-            expiresAt: row.expires_at || undefined,
-            createdAt: (row.created_at || row.created_at_iso) ?? "",
-            lastUsed: row.last_used || undefined,
-            isActive: row.is_active ?? true,
-            usage: row.usage || 0,
-          };
-
-          await saveToDatabase([...apiKeys, newKey]);
+          const row = data?.[0] as ApiKeyRow | undefined;
+          if (row) {
+            const newKey: ApiKey = {
+              id: row.id,
+              name: row.name,
+              key: row.key,
+              description: row.description || undefined,
+              permissions: row.permissions || [],
+              expiresAt: row.expires_at || undefined,
+              createdAt: (row.created_at || row.created_at_iso) ?? "",
+              lastUsed: row.last_used || undefined,
+              isActive: row.is_active ?? true,
+              usage: row.usage || 0,
+            };
+            await saveToDatabase([...apiKeys, newKey]);
+          } else {
+            await fetchApiKeys();
+          }
         } else {
           // Fallback to localStorage
           const newKey: ApiKey = {
