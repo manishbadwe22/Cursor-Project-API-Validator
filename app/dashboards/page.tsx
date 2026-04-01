@@ -258,8 +258,14 @@ const DashboardsPage = () => {
   const normalizeExpiresAtForDb = (value: string | undefined): string | null => {
     const raw = value?.trim();
     if (!raw) return null;
-    if (raw.includes("T")) return raw.split("T")[0] ?? null;
-    return raw.length >= 10 ? raw.slice(0, 10) : raw;
+    const candidate = raw.includes("T") ? raw.split("T")[0] ?? "" : raw;
+    // Accept only strict YYYY-MM-DD to avoid invalid DATE writes.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return null;
+    const parsed = new Date(`${candidate}T00:00:00Z`);
+    const isValid =
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === candidate;
+    return isValid ? candidate : null;
   };
 
   const showToast = (message: string, type: "success" | "error" | "info" = "info") => {

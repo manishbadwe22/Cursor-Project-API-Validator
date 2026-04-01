@@ -1,16 +1,23 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 
 const Home = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboards";
+  const [callbackUrl, setCallbackUrl] = useState("/dashboards");
   const sessionResult = useSession();
   const session = sessionResult?.data;
   const status = sessionResult?.status ?? "unauthenticated";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const fromQuery =
+      new URLSearchParams(window.location.search).get("callbackUrl") ||
+      "/dashboards";
+    setCallbackUrl(fromQuery);
+  }, []);
 
   useEffect(() => {
     if (status === "authenticated") {
