@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { supabase } from "@/lib/supabase";
 import type { ApiKeyInsert } from "@/lib/database.types";
 
@@ -25,6 +26,7 @@ type Toast = {
 };
 
 const DashboardsPage = () => {
+  const { data: session, status } = useSession();
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
@@ -578,6 +580,14 @@ const DashboardsPage = () => {
     setFormData({ ...formData, key: generatedKey });
   };
 
+  const handleDevSignIn = () => {
+    signIn("credentials", {
+      username: "dev",
+      password: "dev1234",
+      callbackUrl: "/dashboards",
+    });
+  };
+
   const totalUsage = apiKeys.reduce((sum, key) => sum + (key.usage || 0), 0);
   const apiLimit = 1000;
 
@@ -609,6 +619,35 @@ const DashboardsPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
           </div>
           <div className="flex items-center gap-3">
+            {status === "loading" ? (
+              <span className="text-xs text-gray-500">Auth...</span>
+            ) : session?.user ? (
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/dashboards" })}
+                className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
+              >
+                Sign out
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => signIn("google", { callbackUrl: "/dashboards" })}
+                  className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-xs font-semibold text-white transition-colors"
+                >
+                  Sign in with Google
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDevSignIn}
+                  className="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-xs font-semibold text-white transition-colors"
+                  title="Fallback when Google OAuth is blocked by network DNS"
+                >
+                  Sign in (Dev)
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span className="text-sm text-gray-700">Operational</span>

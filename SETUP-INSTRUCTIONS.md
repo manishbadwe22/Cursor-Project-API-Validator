@@ -59,3 +59,40 @@ npm run dev
 ```
 
 The app will be available at `http://localhost:3000`.
+
+## Google SSO (NextAuth)
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials** → **OAuth client ID** (Web application).
+2. **Authorized redirect URIs**: `http://localhost:3000/api/auth/callback/google` (and your production URL when deployed).
+3. In **`.env.local`**:
+
+   ```env
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=<openssl rand -base64 32>
+   GOOGLE_CLIENT_ID=<from Google>
+   GOOGLE_CLIENT_SECRET=<from Google>
+   ```
+
+4. Restart `npm run dev`. Home (`/`) has **Continue with Google**.
+
+### Fallback dev login (when Google OAuth is blocked)
+
+If corporate DNS blocks `accounts.google.com`, use the **Sign in (Dev)** button on `/dashboards`.
+
+Defaults:
+
+```text
+username: dev
+password: dev1234
+```
+
+Override in `.env.local` if needed:
+
+```env
+DEV_AUTH_USERNAME=dev
+DEV_AUTH_PASSWORD=dev1234
+```
+
+## API testing with Postman
+
+Install Postman from [postman.com/downloads](https://www.postman.com/downloads/), then follow **POSTMAN-SETUP.md** to import the collection in `postman/`.
