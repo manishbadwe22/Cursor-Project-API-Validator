@@ -26,7 +26,9 @@ type Toast = {
 };
 
 const DashboardsPage = () => {
-  const { data: session, status } = useSession();
+  const sessionResult = useSession();
+  const session = sessionResult?.data;
+  const status = sessionResult?.status ?? "unauthenticated";
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
@@ -622,13 +624,38 @@ const DashboardsPage = () => {
             {status === "loading" ? (
               <span className="text-xs text-gray-500">Auth...</span>
             ) : session?.user ? (
-              <button
-                type="button"
-                onClick={() => signOut({ callbackUrl: "/dashboards" })}
-                className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
-              >
-                Sign out
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="px-3 py-1.5 rounded-lg bg-gray-100 text-xs text-gray-700 max-w-[240px] flex items-center gap-2">
+                  {session.user.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name ? `${session.user.name} avatar` : "User avatar"}
+                      className="w-7 h-7 rounded-full object-cover border border-gray-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-gray-300 text-gray-700 flex items-center justify-center text-[10px] font-semibold shrink-0">
+                      {(session.user.name?.trim()?.[0] ?? "U").toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                  <p className="font-semibold truncate">
+                    {session.user.name ?? "Signed in"}
+                  </p>
+                  {session.user.email && (
+                    <p className="text-[11px] text-gray-500 truncate">
+                      {session.user.email}
+                    </p>
+                  )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: "/dashboards" })}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <button
