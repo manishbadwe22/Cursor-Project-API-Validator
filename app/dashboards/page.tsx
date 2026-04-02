@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { supabase } from "@/lib/supabase";
-import type { ApiKeyInsert, ApiKeyRow } from "@/lib/database.types";
+import type { ApiKeyInsert } from "@/lib/database.types";
 
 type ApiKey = {
   id: string;
@@ -25,6 +26,9 @@ type Toast = {
 };
 
 const DashboardsPage = () => {
+  const sessionResult = useSession();
+  const session = sessionResult?.data;
+  const status = sessionResult?.status ?? "unauthenticated";
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
@@ -118,9 +122,10 @@ const DashboardsPage = () => {
     ];
   };
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       
       // Check if Supabase is configured
       if (!supabase) {
@@ -134,7 +139,7 @@ const DashboardsPage = () => {
           localStorage.setItem("apiKeys", JSON.stringify(dummyKeys));
           setApiKeys(dummyKeys);
         }
-        setIsLoading(false);
+        if (!silent) setIsLoading(false);
         return;
       }
 
@@ -180,7 +185,7 @@ const DashboardsPage = () => {
       console.error("Unexpected error:", error);
       showToast("An unexpected error occurred", "error");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -247,6 +252,20 @@ const DashboardsPage = () => {
 
   const saveToDatabase = async (keys: ApiKey[]) => {
     setApiKeys(keys);
+  };
+
+  /** PostgreSQL DATE column expects YYYY-MM-DD, not full ISO datetime */
+  const normalizeExpiresAtForDb = (value: string | undefined): string | null => {
+    const raw = value?.trim();
+    if (!raw) return null;
+    const candidate = raw.includes("T") ? raw.split("T")[0] ?? "" : raw;
+    // Accept only strict YYYY-MM-DD to avoid invalid DATE writes.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return null;
+    const parsed = new Date(`${candidate}T00:00:00Z`);
+    const isValid =
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === candidate;
+    return isValid ? candidate : null;
   };
 
   const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
@@ -383,8 +402,9 @@ const DashboardsPage = () => {
               name: formData.name,
               key: formData.key,
               description: formData.description || null,
-              permissions: formData.permissions,
-              expires_at: formData.expiresAt || null,
+              permissions:
+                formData.permissions.length > 0 ? formData.permissions : null,
+              expires_at: normalizeExpiresAtForDb(formData.expiresAt),
               monthly_usage_limit: formData.limitEnabled
                 ? formData.monthlyUsageLimit
                 : null,
@@ -438,12 +458,12 @@ const DashboardsPage = () => {
 
         if (supabase) {
           const insertPayload: ApiKeyInsert = {
-            name: formData.name,
+            name: formData.name.trim(),
             key: generatedKey,
             description: formData.description?.trim() || null,
             permissions:
               formData.permissions.length > 0 ? formData.permissions : null,
-            expires_at: formData.expiresAt?.trim() || null,
+            expires_at: normalizeExpiresAtForDb(formData.expiresAt),
             is_active: true,
             usage: 0,
             monthly_usage_limit: formData.limitEnabled
@@ -451,40 +471,28 @@ const DashboardsPage = () => {
               : null,
           };
 
-          const { data, error } = await supabase
+          const { error } = await supabase
             .from("api_keys")
-            .insert(insertPayload as never)
-            .select();
+            .insert(insertPayload as never);
 
           if (error) {
             console.error("Error creating API key:", error);
+            const detail =
+              "message" in error && error.message
+                ? String(error.message)
+                : "details" in error && error.details
+                  ? String(error.details)
+                  : "";
             showToast(
-              error.message
-                ? `Failed to create API key: ${error.message}`
+              detail
+                ? `Failed to create API key: ${detail}`
                 : "Failed to create API key",
               "error"
             );
             return;
           }
 
-          const row = data?.[0] as ApiKeyRow | undefined;
-          if (row) {
-            const newKey: ApiKey = {
-              id: row.id,
-              name: row.name,
-              key: row.key,
-              description: row.description || undefined,
-              permissions: row.permissions || [],
-              expiresAt: row.expires_at || undefined,
-              createdAt: (row.created_at || row.created_at_iso) ?? "",
-              lastUsed: row.last_used || undefined,
-              isActive: row.is_active ?? true,
-              usage: row.usage || 0,
-            };
-            await saveToDatabase([...apiKeys, newKey]);
-          } else {
-            await fetchApiKeys();
-          }
+          await fetchApiKeys({ silent: true });
         } else {
           // Fallback to localStorage
           const newKey: ApiKey = {
@@ -580,6 +588,26 @@ const DashboardsPage = () => {
     setFormData({ ...formData, key: generatedKey });
   };
 
+  const handleDevSignIn = () => {
+    signIn("credentials", {
+      username: "dev",
+      password: "dev1234",
+      callbackUrl: "/dashboards",
+    });
+  };
+
+  const handleGoogleSignIn = async () => {
+    const providers = await (await fetch("/api/auth/providers")).json();
+    if (!providers?.google) {
+      showToast(
+        "Google sign-in is not configured in this environment. Use Sign in (Dev).",
+        "info"
+      );
+      return;
+    }
+    signIn("google", { callbackUrl: "/dashboards" });
+  };
+
   const totalUsage = apiKeys.reduce((sum, key) => sum + (key.usage || 0), 0);
   const apiLimit = 1000;
 
@@ -611,6 +639,60 @@ const DashboardsPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
           </div>
           <div className="flex items-center gap-3">
+            {status === "loading" ? (
+              <span className="text-xs text-gray-500">Auth...</span>
+            ) : session?.user ? (
+              <div className="flex items-center gap-2">
+                <div className="px-3 py-1.5 rounded-lg bg-gray-100 text-xs text-gray-700 max-w-[240px] flex items-center gap-2">
+                  {session.user.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name ? `${session.user.name} avatar` : "User avatar"}
+                      className="w-7 h-7 rounded-full object-cover border border-gray-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-gray-300 text-gray-700 flex items-center justify-center text-[10px] font-semibold shrink-0">
+                      {(session.user.name?.trim()?.[0] ?? "U").toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                  <p className="font-semibold truncate">
+                    {session.user.name ?? "Signed in"}
+                  </p>
+                  {session.user.email && (
+                    <p className="text-[11px] text-gray-500 truncate">
+                      {session.user.email}
+                    </p>
+                  )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: "/dashboards" })}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-xs font-semibold text-white transition-colors"
+                >
+                  Sign in with Google
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDevSignIn}
+                  className="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-xs font-semibold text-white transition-colors"
+                  title="Fallback when Google OAuth is blocked by network DNS"
+                >
+                  Sign in (Dev)
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span className="text-sm text-gray-700">Operational</span>
