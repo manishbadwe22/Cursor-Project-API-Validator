@@ -596,6 +596,18 @@ const DashboardsPage = () => {
     });
   };
 
+  const handleGoogleSignIn = async () => {
+    const providers = await (await fetch("/api/auth/providers")).json();
+    if (!providers?.google) {
+      showToast(
+        "Google sign-in is not configured in this environment. Use Sign in (Dev).",
+        "info"
+      );
+      return;
+    }
+    signIn("google", { callbackUrl: "/dashboards" });
+  };
+
   const totalUsage = apiKeys.reduce((sum, key) => sum + (key.usage || 0), 0);
   const apiLimit = 1000;
 
@@ -666,7 +678,7 @@ const DashboardsPage = () => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => signIn("google", { callbackUrl: "/dashboards" })}
+                  onClick={handleGoogleSignIn}
                   className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-xs font-semibold text-white transition-colors"
                 >
                   Sign in with Google
